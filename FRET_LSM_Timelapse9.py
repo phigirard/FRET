@@ -24,6 +24,7 @@
 #@ String msg7 (visibility=MESSAGE, value="----------------------------------------- Other: -----------------------------------------", required=False) 
 #@ Double timeLapse (label="Timelapse (min)", description="What is the timelapse between 2 images?",value=5, persist=False)  
 #@ String FRETchoice (label="FRET metric:",choices={"FRET index = 100 x A/(A+D)   ", "FRET ratio = A/D   ", "FRET ratio = D/A" }, style="radioButtonHorizontal", persist=True) 
+#@ Boolean calibrationBar (label="Display Calibration Bar ?", description="Calibration Bar",value=True, persist=True) 
 #@ String msg8 (visibility=MESSAGE, value="                                                                          ", required=False) 
 
 
@@ -42,14 +43,13 @@ import os, csv
 import math 
 #from random import *
 
-from java.lang import Double, Float
-from java.awt import Polygon, Color, Font
-from java.awt.event import AdjustmentListener  
+from java.lang import Float
+from java.awt import Font
 
 # ImageJ Library ----------------------------------------------------------------------------
-from ij import IJ, ImagePlus, ImageStack, Prefs
+from ij import IJ, ImagePlus, Prefs
 from ij.io import Opener, OpenDialog
-from ij.process import ImageProcessor, ColorProcessor, ImageConverter, FloatProcessor, AutoThresholder, ImageStatistics
+from ij.process import ImageProcessor, ColorProcessor, ImageConverter, AutoThresholder, ImageStatistics
 from ij.gui import GenericDialog, WaitForUserDialog, PlotWindow, ProfilePlot, Overlay, Line
 from ij.gui import Roi
 from ij.plugin import ZAxisProfiler, ZProjector, RGBStackMerge, RGBStackConverter, HyperStackReducer, Duplicator
@@ -90,6 +90,8 @@ Prefs.blackBackground = True
 
 percThreshold = 0.05 # percentage of pixels for acceptor threshold 
 selectIdx =True
+
+lut = 'Fire'
 #---------------------------------------------------------------
 
 
@@ -208,34 +210,6 @@ def subtractBackground(imp_, roi_):
 		IJ.run(imp_, "Subtract...", "value="+str(rt.getValue ('Mean', 0))+" slice")
 	return
 
-
-# Computation of the fret index
-def CalculationFRETmetric(impD_,impA_, FRETmetric_):
-	if FRETmetric_ == FRETmetrics[0]:
-		impD_ = IC.run(impD_,impA_,  "Add create 32-bit stack")#------- 1) image Donor+Acceptor -> Denominator
-		IJ.setRawThreshold(impD_,1,Float.MAX_VALUE, None) # remove 0-value pixels to exclude infinity value in the  divide calculation
-		IJ.run(impD_, "NaN Background", "stack")	
-		impA_ = IC.run( impA_, impD_, "Divide create 32-bit stack")#------- 2) image Acceptor/(Donor+Acceptor)
-		IJ.setRawThreshold(impA_,0,1, None)
-		IJ.run(impA_, "NaN Background", "stack")	
-		IJ.run(impA_, "Multiply...", "value=100 stack")
-		IJ.run(impA_, "Enhance Contrast", "saturated=0.35 stack")
-	elif FRETmetric_ == FRETmetrics[1]:
-		impA_ = CalculationFRETratio(impD_,impA_)
-	else :
-		impA_ = CalculationFRETratio(impA_,impD_)
-	return impA_
-
-def CalculationFRETratio(imp1_,imp2_) : #image imp2_/imp1_
-	IJ.setRawThreshold(imp1_,1,Float.MAX_VALUE, None) # remove 0-value pixels to exclude infinity value in the  divide calculation
-	IJ.run(imp1_, "NaN Background", "stack")	
-	impRatio_ = IC.run( imp2_, imp1_, "Divide create 32-bit stack")
-	IJ.setRawThreshold(impRatio_,0,Float.MAX_VALUE, None) # remove extreme-value pixels (due to the division)
-	IJ.run(impRatio_, "NaN Background", "stack")	
-	IJ.run(impRatio_, "Enhance Contrast", "saturated=0.35 stack")
-	return impRatio_
-	
-
 def bleachCorrection(imp_, CorrectionMethodIdx_, backROI_):
 	impcorrected = imp_.duplicate()
 	if(CorrectionMethodIdx == 0) : #Simple Ratio Method
@@ -279,6 +253,49 @@ def applyThreshold(imp_, minthres_, maxthres_):
 		IJ.run(imp_, "NaN Background", "")	
 		IJ.run(imp_, "Despeckle", "")
 	return 
+
+# Computation of the fret index
+def CalculationFRETmetric(impD_,impA_, FRETmetric_):
+	if FRETmetric_ == FRETmetrics[0]:
+		impD_ = IC.run(impD_,impA_,  "Add create 32-bit stack")#------- 1) image Donor+Acceptor -> Denominator
+		IJ.setRawThreshold(impD_,1,Float.MAX_VALUE, None) # remove 0-value pixels to exclude infinity value in the  divide calculation
+		IJ.run(impD_, "NaN Background", "stack")	
+		impA_ = IC.run( impA_, impD_, "Divide create 32-bit stack")#------- 2) image Acceptor/(Donor+Acceptor)
+		IJ.setRawThreshold(impA_,0,1, None)
+		IJ.run(impA_, "NaN Background", "stack")	
+		IJ.run(impA_, "Multiply...", "value=100 stack")
+		IJ.run(impA_, "Enhance Contrast", "saturated=0.35 stack")
+	elif FRETmetric_ == FRETmetrics[1]:
+		impA_ = CalculationFRETratio(impD_,impA_)
+	else :
+		impA_ = CalculationFRETratio(impA_,impD_)
+	return impA_
+
+def CalculationFRETratio(imp1_,imp2_) : #image imp2_/imp1_
+	IJ.setRawThreshold(imp1_,1,Float.MAX_VALUE, None) # remove 0-value pixels to exclude infinity value in the  divide calculation
+	IJ.run(imp1_, "NaN Background", "stack")	
+	impRatio_ = IC.run( imp2_, imp1_, "Divide create 32-bit stack")
+	IJ.setRawThreshold(impRatio_,0,Float.MAX_VALUE, None) # remove extreme-value pixels (due to the division)
+	IJ.run(impRatio_, "NaN Background", "stack")	
+	IJ.run(impRatio_, "Enhance Contrast", "saturated=0.35 stack")
+	return impRatio_
+	
+
+#draw calibration bar
+def drawCalibrationBar(statsMin_, statsMax_):
+	impBar_ = IJ.createImage("Calibration Bar", "32-bit black", 276, 50, 1)
+	ipBar_ = impBar_.getProcessor()
+	step= (statsMax_ - statsMin_)/255
+	for i in range(256) :
+		for j in range(30) :
+			ipBar_.setf(11+i,j, statsMin_ + i*step)
+	ipBar_.setColor(256)
+	ipBar_.setFont(Font("SansSerif", Font.BOLD, 12))
+	ipBar_.drawString("{:.1f}".format(statsMin_),0, 48)
+	ipBar_.drawString("{:.1f}".format(statsMax_),246, 48)
+	impBar_.updateAndDraw()
+	impBar_.setDisplayRange(statsMin_, statsMax_)
+	return impBar_
 
 #---------------------------------------------------------------
 #-----------------       End of Functions      -----------------
@@ -348,11 +365,11 @@ if fileType == "Spectral Confocal LSM   " :
 	#Create Folder for Donor and Acceptor images
 	basename = os.path.basename(os.path.splitext(lsmPath)[0]).replace(' ', '_').lower()
 	basename += "_S" + adjustSizeNum(str(idxSerie), 2)
-	impFolder = createFolder(lsmPath , basename)
+	imageDir = createFolder(lsmPath , basename)
 	
 	#Save Donor and Acceptor raw images
-	IJ.saveAs(impDonor, "TIFF",os.path.join(impFolder, basename+"_c1.tif")) #save Donor raw image
-	IJ.saveAs(impAcceptor, "TIFF",os.path.join(impFolder, basename+"_c2.tif")) #save Acceptor raw image
+	IJ.saveAs(impDonor, "TIFF",os.path.join(imageDir, basename+"_c1.tif")) #save Donor raw image
+	IJ.saveAs(impAcceptor, "TIFF",os.path.join(imageDir, basename+"_c2.tif")) #save Acceptor raw image
 
 else : 
 
@@ -372,7 +389,7 @@ else :
 	
 	#create folder for analysis 
 	basename = os.path.basename(os.path.splitext(donorPath)[0]).replace(' ', '_').lower()
-	impFolder = createFolder(donorPath , basename)
+	imageDir = createFolder(donorPath , basename)
 
 	#open the files 
 	impDonor = Opener().openImage(donorPath)
@@ -391,20 +408,13 @@ print 'PART 2 : Bleaching correction and substract background'
 print 'Select a ROI in the background'
 backROI = getBackgroundROI(impAcceptor)
 
-if bleachCorr :
-	print 'Correction of the photobleaching '
-	CorrectionMethodIdx = CorrectionMethods.index(CorrectionMethod)
-	impDonor = bleachCorrection(impDonor, CorrectionMethodIdx, backROI)
-	impAcceptor = bleachCorrection(impAcceptor, CorrectionMethodIdx, backROI)
-
-
 #Check the bit depth of the images
 depth = impAcceptor.getBitDepth()
-ImageConverter(impAcceptor).convertToGray32()
-ImageConverter(impDonor).convertToGray32()
-
 impAcceptor.setSlice(1)
 impT_slice = impAcceptor.crop("whole-slice")
+
+ImageConverter(impAcceptor).convertToGray32()
+ImageConverter(impDonor).convertToGray32()
 
 maxPix = impT_slice.getStatistics(Measurements.MIN_MAX).max
 if maxPix < 4096 and depth > 8:
@@ -414,6 +424,11 @@ applyThreshold(impDonor, 0,  maxVal - 1)
 applyThreshold(impAcceptor, 0,  maxVal - 1)
 
 
+if bleachCorr :
+	print 'Correction of the photobleaching '
+	CorrectionMethodIdx = CorrectionMethods.index(CorrectionMethod)
+	impDonor = bleachCorrection(impDonor, CorrectionMethodIdx, backROI)
+	impAcceptor = bleachCorrection(impAcceptor, CorrectionMethodIdx, backROI)
 
 if manualSub :
 	subtractBackground(impDonor,backROI)
@@ -441,15 +456,14 @@ applyThreshold(impDonor, max(thres_min, 1),  min(thres_max, maxVal - 1))
 applyThreshold(impAcceptor, max(thres_min, 1),  min(thres_max, maxVal - 1))
 
 
-
-IJ.saveAs(impDonor, "TIFF",os.path.join(impFolder, basename+"_c1thres.tif")) #save Donor raw image
-IJ.saveAs(impAcceptor, "TIFF",os.path.join(impFolder, basename+"_c2thres.tif")) #save Acceptor raw image
+#IJ.saveAs(impDonor, "TIFF",os.path.join(imageDir, basename+"_c1thres.tif")) #save Donor raw image
+#IJ.saveAs(impAcceptor, "TIFF",os.path.join(imageDir, basename+"_c2thres.tif")) #save Acceptor raw image
 
 
 
 	
 #### PART 3 :  Calculate FRET metric stack	
-print 'PART 3 : Calculate '+ FRETchoice
+print 'PART 3 : Measurement of '+ FRETchoice
 
 metric = "ratio" 
 if FRETchoice == FRETmetrics[0]:
@@ -458,9 +472,8 @@ elif FRETchoice == FRETmetrics[1]:
 	metric+="A_D"
 else :
 	metric+="D_A"
-
 impFRET = CalculationFRETmetric(impDonor, impAcceptor, FRETchoice)
-FRETTitle = "FRET_"+metric+"_"+os.path.basename(basename)+".tif"
+FRETTitle = "FRET_"+metric+"_"+os.path.basename(basename)
 impFRET.setTitle(FRETTitle)
 stats = impFRET.getStatistics(Measurements.MIN_MAX)
 statsMax = stats.max
@@ -471,26 +484,15 @@ if FRETchoice == FRETmetrics[0]:
 impFRET.setDisplayRange(statsMin, statsMax)
 impFRET.setCalibration(cal)
 #IJ.run(impFRET, "Enhance Contrast", "saturated=0.35 stack")
-IJ.run(impFRET, "Fire", "stack")
-IJ.saveAs(impFRET, "TIFF",os.path.join(impFolder, FRETTitle))
+IJ.run(impFRET, lut, "stack")
+IJ.saveAs(impFRET, "TIFF",os.path.join(imageDir, FRETTitle))
 impFRET.show()
 
 
-#draw calibration bar
-impBar = IJ.createImage("Calibration Bar", "32-bit black", 276, 50, 1)
-ipBar = impBar.getProcessor()
-step= (statsMax - statsMin)/255
-for i in range(256) :
-	for j in range(30) :
-		ipBar.setf(11+i,j, statsMin + i*step)
-ipBar.setColor(256)
-ipBar.setFont(Font("SansSerif", Font.BOLD, 12))
-ipBar.drawString("{:.1f}".format(statsMin),0, 48)
-ipBar.drawString("{:.1f}".format(statsMax),246, 48)
-impBar.updateAndDraw()
-impBar.setDisplayRange(statsMin, statsMax)
-IJ.run(impBar, "Fire", "")
-IJ.saveAs(impBar, "TIFF",os.path.join(impFolder, "FRET_CalibrationBar"))
-impBar.show()
+if calibrationBar :
+	impBar = drawCalibrationBar(statsMin, statsMax)
+	IJ.run(impBar, lut , "")
+	impBar.show()
+	IJ.saveAs(impBar, "TIFF",os.path.join(imageDir, "FRET_CalibrationBar"))
 
 print 'End of analysis'
