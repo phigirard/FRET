@@ -449,9 +449,11 @@ ta.close()
 impT_slice.hide()
 impT_slice.close()
 
+thres_min = max(thres_min, 1)
+applyThreshold(impDonor, thres_min,  min(thres_max, maxVal - 1))
+applyThreshold(impAcceptor, thres_min,  min(thres_max, maxVal - 1))
 
-applyThreshold(impDonor, max(thres_min, 1),  min(thres_max, maxVal - 1))
-applyThreshold(impAcceptor, max(thres_min, 1),  min(thres_max, maxVal - 1))
+print "The threshold value is = ", thres_min
 
 
 #IJ.saveAs(impDonor, "TIFF",os.path.join(imageDir, basename+"_c1thres.tif")) #save Donor raw image
