@@ -4,7 +4,7 @@
 # 	Université Paris Cité, CNRS, Institut Jacques Monod, F-75013 Paris, France
 #
 # 	FRET_LSM_Timelapse.py
-#	Release v10.0
+#	Release v12.0
 #
 #	Copyright 2022 - BSD-3-Clause license
 #                                                                             
