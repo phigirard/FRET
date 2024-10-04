@@ -488,8 +488,8 @@ for slic in range(nbSlice):
 	impT_slice.close()
 	
 	if ChoiceSub == Subvalues[0] :
-		IJ.run(impDonor_slice, "Subtract...", "value="+BGValueDonor+" slice")
-		IJ.run(impAcceptor_slice, "Subtract...", "value="+BGValueAcceptor+" slice")
+		IJ.run(impDonor_slice, "Subtract...", "value="+str(BGValueDonor)+" slice")
+		IJ.run(impAcceptor_slice, "Subtract...", "value="+str(BGValueAcceptor)+" slice")
 	elif ChoiceSub == Subvalues[1] :
 		BGValueDonor = subtractBG(impDonor_slice,backROI)
 		BGValueAcceptor = subtractBG(impAcceptor_slice,backROI)
