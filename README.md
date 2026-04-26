@@ -6,6 +6,5 @@ an [ImageJ](http://imagej.net/Welcome)/[Fiji](https://fiji.sc) python script for
 FRET runs under the  [BSD-3 License](https://opensource.org/licenses/BSD-3-Clause)
 
 ---
-This document describes the workings of the ImageJ/Fiji python script **FRET.py**, written by Philippe Girard ([email](philippe.girard@ijm.fr)).
+This document describes the workings of the ImageJ/Fiji python script **FRET_LSM_Timelapse.py**, written by Philippe Girard ([email](philippe.girard@ijm.fr)).
 
-<br><p align="center"><img src="./FRET.png" width="700"></p><br>
